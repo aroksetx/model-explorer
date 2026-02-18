@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import PixelLoaderGame from "./PixelLoaderGame";
 
 const PAGE_SIZE = 120;
+const COMPARE_LIMIT = 4;
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
@@ -66,6 +67,10 @@ function compactRow(row) {
   };
 }
 
+function modelRowKey(row) {
+  return `${row.providerId}:${row.modelId}`;
+}
+
 function normalizeRegistry(payload) {
   const rows = [];
   const providers = Object.entries(payload ?? {});
@@ -123,6 +128,8 @@ export default function ModelsBoard() {
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
   const [webMcpEnabled, setWebMcpEnabled] = useState(false);
+  const [selectedModelKeys, setSelectedModelKeys] = useState([]);
+  const [compareNotice, setCompareNotice] = useState("");
 
   const providerOptions = useMemo(() => {
     const uniqueProviders = new Set(allRows.map((row) => row.providerId));
@@ -149,6 +156,35 @@ export default function ModelsBoard() {
     () => filteredRows.slice(0, Math.min(visibleCount, filteredRows.length)),
     [filteredRows, visibleCount],
   );
+
+  const rowLookup = useMemo(() => {
+    const map = new Map();
+    for (const row of allRows) {
+      map.set(modelRowKey(row), row);
+    }
+    return map;
+  }, [allRows]);
+
+  const selectedRows = useMemo(
+    () => selectedModelKeys.map((key) => rowLookup.get(key)).filter(Boolean),
+    [selectedModelKeys, rowLookup],
+  );
+
+  const selectedKeySet = useMemo(() => new Set(selectedModelKeys), [selectedModelKeys]);
+
+  const bestInputCost = useMemo(() => {
+    const numericCosts = selectedRows
+      .map((row) => row.costInput)
+      .filter((value) => typeof value === "number");
+    return numericCosts.length > 0 ? Math.min(...numericCosts) : null;
+  }, [selectedRows]);
+
+  const bestOutputCost = useMemo(() => {
+    const numericCosts = selectedRows
+      .map((row) => row.costOutput)
+      .filter((value) => typeof value === "number");
+    return numericCosts.length > 0 ? Math.min(...numericCosts) : null;
+  }, [selectedRows]);
 
   const stats = useMemo(() => {
     const totalProviders = new Set(allRows.map((row) => row.providerId)).size;
@@ -182,6 +218,24 @@ export default function ModelsBoard() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [query, provider]);
+
+  useEffect(() => {
+    const availableKeys = new Set(allRows.map((row) => modelRowKey(row)));
+    setSelectedModelKeys((prev) => {
+      const next = prev.filter((key) => availableKeys.has(key));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [allRows]);
+
+  useEffect(() => {
+    if (!compareNotice) {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setCompareNotice("");
+    }, 2400);
+    return () => window.clearTimeout(timeoutId);
+  }, [compareNotice]);
 
   useEffect(() => {
     let alive = true;
@@ -439,6 +493,26 @@ export default function ModelsBoard() {
   const hasMoreRows = shownCount < totalMatches;
   const remaining = totalMatches - shownCount;
   const increment = Math.min(PAGE_SIZE, remaining);
+  const canHighlightBestPrice = selectedRows.length > 1;
+
+  function toggleCompareModel(row) {
+    const key = modelRowKey(row);
+    setSelectedModelKeys((previousKeys) => {
+      if (previousKeys.includes(key)) {
+        return previousKeys.filter((item) => item !== key);
+      }
+      if (previousKeys.length >= COMPARE_LIMIT) {
+        setCompareNotice(`Compare up to ${COMPARE_LIMIT} models at once.`);
+        return previousKeys;
+      }
+      return [...previousKeys, key];
+    });
+  }
+
+  function clearCompare() {
+    setSelectedModelKeys([]);
+    setCompareNotice("");
+  }
 
   return (
     <main className="shell">
@@ -475,9 +549,15 @@ export default function ModelsBoard() {
       </header>
 
       <section className="ticker panel" aria-hidden="true">
-        <p>
-          Indie dev with pixel flair • shipping weekly experiments • design + engineering in one • automation-first
-          workflow
+        <p className="ticker-track">
+          <span>
+            LIVE AI MODEL REGISTRY • EXPLORE PROVIDERS + FAMILIES • COMPARE CONTEXT, OUTPUT, REASONING, COST •
+            POWERED BY MODELS.DEV API
+          </span>
+          <span>
+            LIVE AI MODEL REGISTRY • EXPLORE PROVIDERS + FAMILIES • COMPARE CONTEXT, OUTPUT, REASONING, COST •
+            POWERED BY MODELS.DEV API
+          </span>
         </p>
       </section>
 
@@ -523,12 +603,107 @@ export default function ModelsBoard() {
         ))}
       </section>
 
-      <section className="table-shell panel" aria-live="polite">
+      <section className="compare-shell panel" aria-live="polite">
+        {selectedRows.length === 0 ? (
+          <div className="compare-cta">
+            <p className="compare-cta-kicker">Model Compare</p>
+            <p className="compare-cta-title">
+              Select up to {COMPARE_LIMIT} models to compare their main specs.
+            </p>
+            <p className="compare-cta-copy">
+              Use the <code>Pick</code> checkbox in the table to build a side-by-side view for limits, reasoning, and
+              pricing.
+            </p>
+            <a className="compare-cta-action" href="#models-table">
+              Start Selecting Models
+            </a>
+          </div>
+        ) : (
+          <>
+            <div className="compare-meta">
+              <p>{`${selectedRows.length} model${selectedRows.length > 1 ? "s" : ""} selected for comparison`}</p>
+              <button type="button" onClick={clearCompare}>
+                Clear Compare
+              </button>
+            </div>
+
+            {compareNotice && <p className="compare-notice">{compareNotice}</p>}
+
+            <div className="compare-grid">
+              {selectedRows.map((row) => (
+                <article key={modelRowKey(row)} className="compare-card">
+                  <p className="compare-provider">{row.providerName}</p>
+                  <p className="compare-model">
+                    <code>{row.modelId}</code>
+                  </p>
+
+                  <dl>
+                    <div>
+                      <dt>Family</dt>
+                      <dd>
+                        <code>{row.family}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Modalities</dt>
+                      <dd>
+                        <code>{row.modalitiesLabel}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Context</dt>
+                      <dd>{formatInteger(row.contextLimit)}</dd>
+                    </div>
+                    <div>
+                      <dt>Output</dt>
+                      <dd>{formatInteger(row.outputLimit)}</dd>
+                    </div>
+                    <div>
+                      <dt>Reasoning</dt>
+                      <dd className={row.reasoning ? "status-true" : "status-false"}>{row.reasoning ? "yes" : "no"}</dd>
+                    </div>
+                    <div>
+                      <dt>Input Cost</dt>
+                      <dd
+                        className={
+                          canHighlightBestPrice &&
+                          typeof row.costInput === "number" &&
+                          row.costInput === bestInputCost
+                            ? "compare-best"
+                            : undefined
+                        }
+                      >
+                        {formatCost(row.costInput)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Output Cost</dt>
+                      <dd
+                        className={
+                          canHighlightBestPrice &&
+                          typeof row.costOutput === "number" &&
+                          row.costOutput === bestOutputCost
+                            ? "compare-best"
+                            : undefined
+                        }
+                      >
+                        {formatCost(row.costOutput)}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section id="models-table" className="table-shell panel" aria-live="polite">
         <div className="table-meta">
-          <p>
+          <p className="table-meta-copy">
             {loading
               ? "Loading model registry..."
-              : `${totalMatches.toLocaleString("en-US")} matching models`}
+              : `${totalMatches.toLocaleString("en-US")} matching models • ${selectedRows.length.toLocaleString("en-US")} selected for compare`}
           </p>
           <button
             type="button"
@@ -547,6 +722,7 @@ export default function ModelsBoard() {
             <table>
               <thead>
                 <tr>
+                  <th className="pick-col">Pick</th>
                   <th>Provider</th>
                   <th>Model</th>
                   <th>Family</th>
@@ -561,7 +737,7 @@ export default function ModelsBoard() {
               <tbody>
                 {error && (
                   <tr>
-                    <td colSpan={9} className="placeholder">
+                    <td colSpan={10} className="placeholder">
                       Unable to load models data: {error}
                     </td>
                   </tr>
@@ -569,34 +745,46 @@ export default function ModelsBoard() {
 
                 {!error && visibleRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="placeholder">
+                    <td colSpan={10} className="placeholder">
                       No models match this filter.
                     </td>
                   </tr>
                 )}
 
                 {!error &&
-                  visibleRows.map((row) => (
-                    <tr key={`${row.providerId}:${row.modelId}`}>
-                      <td className="provider">{row.providerName}</td>
-                      <td className="model">
-                        <code>{row.modelId}</code>
-                      </td>
-                      <td className="family">
-                        <code>{row.family}</code>
-                      </td>
-                      <td>
-                        <code>{row.modalitiesLabel}</code>
-                      </td>
-                      <td className="num">{formatInteger(row.contextLimit)}</td>
-                      <td className="num">{formatInteger(row.outputLimit)}</td>
-                      <td className={row.reasoning ? "status-true" : "status-false"}>
-                        {row.reasoning ? "yes" : "no"}
-                      </td>
-                      <td className="num">{formatCost(row.costInput)}</td>
-                      <td className="num">{formatCost(row.costOutput)}</td>
-                    </tr>
-                  ))}
+                  visibleRows.map((row) => {
+                    const key = modelRowKey(row);
+                    return (
+                      <tr key={key}>
+                        <td className="pick-cell">
+                          <input
+                            className="pick-toggle"
+                            type="checkbox"
+                            checked={selectedKeySet.has(key)}
+                            onChange={() => toggleCompareModel(row)}
+                            aria-label={`Select ${row.modelId} from ${row.providerName} for comparison`}
+                          />
+                        </td>
+                        <td className="provider">{row.providerName}</td>
+                        <td className="model">
+                          <code>{row.modelId}</code>
+                        </td>
+                        <td className="family">
+                          <code>{row.family}</code>
+                        </td>
+                        <td>
+                          <code>{row.modalitiesLabel}</code>
+                        </td>
+                        <td className="num">{formatInteger(row.contextLimit)}</td>
+                        <td className="num">{formatInteger(row.outputLimit)}</td>
+                        <td className={row.reasoning ? "status-true" : "status-false"}>
+                          {row.reasoning ? "yes" : "no"}
+                        </td>
+                        <td className="num">{formatCost(row.costInput)}</td>
+                        <td className="num">{formatCost(row.costOutput)}</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           )}
@@ -609,11 +797,18 @@ export default function ModelsBoard() {
               : `${shownCount.toLocaleString("en-US")} shown of ${totalMatches.toLocaleString("en-US")} matches (${allRows.length.toLocaleString("en-US")} total)${updatedAt ? ` | Updated ${updatedAt}` : ""}`}
           </p>
 
-          {hasMoreRows && (
+          {(hasMoreRows || selectedRows.length > 0) && (
             <div className="footer-actions">
-              <button type="button" onClick={() => setVisibleCount((value) => value + PAGE_SIZE)}>
-                Load More (+{increment.toLocaleString("en-US")})
-              </button>
+              {selectedRows.length > 0 && (
+                <button type="button" onClick={clearCompare}>
+                  Clear Compare ({selectedRows.length.toLocaleString("en-US")})
+                </button>
+              )}
+              {hasMoreRows && (
+                <button type="button" onClick={() => setVisibleCount((value) => value + PAGE_SIZE)}>
+                  Load More (+{increment.toLocaleString("en-US")})
+                </button>
+              )}
             </div>
           )}
         </footer>

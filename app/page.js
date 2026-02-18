@@ -12,7 +12,7 @@ export default function HomePage() {
         name: "Models.dev API Explorer",
         inLanguage: "en-US",
         description:
-          "Search and compare AI models from models.dev/api.json with providers, model limits, reasoning support, and pricing.",
+          "Search and compare AI models side by side in a live database of AI models from models.dev/api.json with providers, model limits, reasoning support, and pricing.",
         publisher: {
           "@type": "Person",
           name: "Stanislav Black",
@@ -20,11 +20,27 @@ export default function HomePage() {
         },
       },
       {
+        "@type": "WebApplication",
+        "@id": `${siteUrl}/#app`,
+        name: "Models.dev API Explorer",
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "Web",
+        url: `${siteUrl}/`,
+        description:
+          "A live web dashboard and database of AI models to filter and compare models side by side using data from models.dev/api.json.",
+        featureList: [
+          "Live model registry search",
+          "Provider and family filtering",
+          "Side-by-side model comparison",
+          "Context, output, reasoning, and pricing comparison",
+        ],
+      },
+      {
         "@type": "Dataset",
         "@id": `${siteUrl}/#dataset`,
         name: "Models.dev API Registry Mirror",
         description:
-          "Live representation of models.dev/api.json with normalized provider, model, modality, and cost metadata.",
+          "Live representation of models.dev/api.json with normalized provider, model, modality, and cost metadata for discovery and comparison.",
         url: `${siteUrl}/`,
         isBasedOn: "https://models.dev/api.json",
         creator: {
@@ -35,6 +51,8 @@ export default function HomePage() {
         keywords: [
           "models.dev",
           "AI model registry",
+          "database of AI models",
+          "model comparison",
           "LLM models",
           "token pricing",
           "context window",

@@ -37,7 +37,7 @@ export async function GET() {
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ fontSize: 84, fontWeight: 700, lineHeight: 1 }}>MODELS.DEV API EXPLORER</div>
           <div style={{ fontSize: 32, color: "#d1c7bc" }}>
-            Providers, model limits, reasoning support, and token pricing in one live dashboard.
+            Search and compare AI models side by side by providers, limits, reasoning, and pricing.
           </div>
         </div>
 
